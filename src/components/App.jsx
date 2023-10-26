@@ -1,90 +1,96 @@
-import Searchbar from "components/Searchbar/Searchbar";
-import ImageGallery from "./ImageGallery/ImageGallery";
-import { useState } from 'react'
-import { imagesItems } from "api";
-import { LoadMore } from "./Button/Button.styled";
-import { RotatingLines } from 'react-loader-spinner';
-import { useEffect } from "react";
+// import React, { PureComponent, useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import styles from './App.module.css';
+import Searchbar from './Searchbar/Searchbar';
+import ImageGallery from './ImageGallery/ImageGallery';
+import Button from './Button/Button';
+import Loader from './Loader/Loader';
+import api from 'services/api';
+import Modal from './Modal/Modal';
 
+const App = () => {
+  const [images, setImages] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [page, setPage] = useState(null);
+  const [query, setQuery] = useState('');
+  const [modalImage, setModalImage] = useState(null);
+  const [isLastPage, setIsLastPage] = useState(false);
 
-export const App = () => {
-  
-  const [items, setItems] = useState([])
-  const [galerryValue, setGalerryValue] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [error, setEror] = useState(false)
-  const [page, setPage] = useState(1)
-  const [totalPage , setTotalPage ] = useState(false)
- 
-  const hendleSubmit = data => {
-    setItems([])
-    setPage(1)
-    setTotalPage(false)
-    setLoading(true)
-    setEror(false)
-    setGalerryValue(data)
+  const handleSearch = useCallback(searchText => {
+    setQuery(searchText);
+    setPage(1);
+  }, []);
 
-  };
-  const handleLoadMore = () => {
-      setPage( prev => prev + 1)
-  };
-   
-   useEffect(() => {
-     if (!galerryValue){
-       return
-     }
-     async function getImages() {
-       try {
-         setLoading(true)
-         setEror(false)
-        
-         const itemsImg = await imagesItems(galerryValue,page);
-         if (itemsImg.totalHits < 1) {
-           throw new Error(
-             'Sorry, there are no images matching your search query. Please try again.'
-           );
-         }
+  const handleLoadMore = useCallback(() => {
+    setPage(page + 1);
+  }, [page]);
 
-         const totalPageMath =
-         page < Math.ceil(itemsImg.totalHits / 12);
-         setItems(prev => [...prev, ...itemsImg.hits])
-         setTotalPage(totalPageMath)
-      
-       } catch (error) {
-         setEror(true)
-         console.error('erere');
-       } finally {
-        setLoading(false)
-       }
-     }
+  const handleCloseModal = useCallback(() => {
+    setModalImage(null);
+  }, []);
 
-    getImages()
+  const handleKeyDown = useCallback(
+    e => {
+      if (e.keyCode === 27) {
+        handleCloseModal();
+      }
+    },
+    [handleCloseModal]
+  );
 
+  useEffect(() => {
+    document.addEventListener('keydown', handleKeyDown, false);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown, false);
+    };
+    // eslint-disable-next-line
+  }, []);
 
-  },[galerryValue,page])
+  useEffect(() => {
+    if (page) {
+      async function fetchData() {
+        setLoading(true);
+        const showOnlyNew = page === 1;
+        try {
+          const [totalImages, fetchedImages] = await api.fetchImages(
+            page,
+            query
+          );
+          const newImages = showOnlyNew
+            ? fetchedImages
+            : [...images, ...fetchedImages];
+          const isLastPage = totalImages <= newImages.length;
 
+          setImages(newImages);
+          setIsLastPage(isLastPage);
+        } catch (error) {
+          setError(error);
+        } finally {
+          setLoading(false);
+        }
+      }
+      fetchData();
+    }
+    // eslint-disable-next-line
+  }, [page, query]);
 
-    return (
-      <>
-        <Searchbar onSubmitForm={hendleSubmit} />
-        {loading && (
-          <RotatingLines
-            strokeColor="grey"
-            strokeWidth="5"
-            animationDuration="0.75"
-            width="50"
-            visible={true}
-          />
-        )}
-        {error && <b>Wooopss error please reload webSite...</b>}
+  return (
+    <div className={styles.App}>
+      {error && <p>Whoops, something went wrong: {error.message}</p>}
+      <Searchbar onSubmit={handleSearch} />
+      {images.length > 0 && (
+        <ImageGallery images={images} onImageClick={setModalImage} />
+      )}
+      <Loader isLoading={loading} />
+      {images.length > 0 && !loading && !isLastPage && (
+        <Button onClick={handleLoadMore} />
+      )}
+      {modalImage && (
+        <Modal image={modalImage} onClose={handleCloseModal}></Modal>
+      )}
+    </div>
+  );
+};
 
-        <ImageGallery items={items} />
-
-        {totalPage && (
-          <LoadMore onClick={handleLoadMore}>Load more</LoadMore>
-        )}
-      </>
-    );
-}
-
-export default App
+export default App;
